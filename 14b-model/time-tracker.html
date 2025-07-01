@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Tracker</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --accent: #e74c3c;
+            --light: #ecf0f1;
+            --dark: #2c3e50;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--light);
+            color: var(--dark);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .menu-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .button {
+            background: var(--secondary);
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .button:hover {
+            background: #2980b9;
+        }
+
+        .tasks-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .week-grid {
+            display: grid;
+            gap: 20px;
+        }
+
+        .week-header {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--primary);
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .date-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .task-item {
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .form-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            padding: 20px;
+            z-index: 1000;
+        }
+
+        .form-modal.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .form-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            position: relative;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .error {
+            color: var(--accent);
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .week-grid {
+                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Time Tracker</h1>
+            <div class="menu-buttons">
+                <button class="button" onclick="exportData()">Export</button>
+                <button class="button" onclick="importData()">Import</button>
+            </div>
+        </header>
+
+        <div class="tasks-container" id="tasksContainer">
+            <!-- Tasks will be inserted here -->
+        </div>
+    </div>
+
+    <div class="form-modal" id="formModal">
+        <div class="form-content">
+            <h2 id="formTitle">Add Task</h2>
+            <form onsubmit="handleSubmit(event)">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="taskDate" required>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="taskCategory">
+                        <option value="work">Work</option>
+                        <option value="free">Free</option>
+                        <option value="sick">Sick</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="taskDescription" required>
+                </div>
+                <div class="form-group">
+                    <label>Hours</label>
+                    <input type="number" step="0.5" min="0" max="24" id="taskHours" required>
+                </div>
+                <button type="submit" class="button">Save</button>
+                <button type="button" class="button" onclick="closeForm()">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+        const today = new Date().toISOString().split('T')[0];
+
+        function saveToLocalStorage() {
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+        }
+
+        function renderTasks() {
+            const container = document.getElementById('tasksContainer');
+            container.innerHTML = '';
+
+            // Group tasks by week
+            const weeks = groupTasksByWeek();
+            weeks.forEach(week => {
+                const weekElement = document.createElement('div');
+                weekElement.className = 'week-grid';
+                weekElement.innerHTML = `
+                    <div class="week-header">Week of ${getWeekDateString(week.firstDate)}</div>
+                `;
+
+                // Create date headers and tasks
+                week.dates.forEach(date => {
+                    const dateElement = document.createElement('div');
+                    dateElement.className = 'date-header';
+                    dateElement.innerHTML = `
+                        <div>${date}</div>
+                        <div>Hours: ${getTotalHoursForDate(date)}</div>
+                    `;
+                    weekElement.appendChild(dateElement);
+
+                    // Add tasks for the date
+                    const tasksForDate = week.tasks[date] || [];
+                    tasksForDate.sort((a, b) => a.description.localeCompare(b.description)).forEach(task => {
+                        const taskElement = document.createElement('div');
+                        taskElement.className = 'task-item';
+                        taskElement.innerHTML = `
+                            <div>${task.description}</div>
+                            <div class="task-actions">
+                                <button class="button" onclick="editTask(${task.id})">Edit</button>
+                                <button class="button" onclick="deleteTask(${task.id})">Delete</button>
+                            </div>
+                        `;
+                        weekElement.appendChild(taskElement);
+                    });
+                });
+
+                container.appendChild(weekElement);
+            });
+
+            // Add empty state if no tasks
+            if (weeks.length === 0) {
+                const emptyState = document.createElement('div');
+                emptyState.className = 'empty-state';
+                emptyState.innerHTML = `
+                    <h2>No tasks yet!</h2>
+                    <button class="button" onclick="openForm()">Add Task</button>
+                `;
+                container.appendChild(emptyState);
+            }
+        }
+
+        function groupTasksByWeek() {
+            const weeks = [];
+            const weekMap = {};
+
+            // Get unique dates
+            const dates = [...new Set(tasks.map(task => task.date))].sort((a, b) => {
+                const dateA = new Date(a);
+                const dateB = new Date(b);
+                return dateB - dateA;
+            });
+
+            dates.forEach(date => {
+                const weekKey = getWeekKey(date);
+                if (!weekMap[weekKey]) {
+                    weeks.push({
+                        firstDate: date,
+                        dates: [],
+                        tasks: {},
+                        id: weeks.length + 1
+                    });
+                    weekMap[weekKey] = weeks[weeks.length - 1];
+                }
+
+                if (!weekMap[weekKey].dates.includes(date)) {
+                    weekMap[weekKey].dates.push(date);
+                    weekMap[weekKey].tasks[date] = [];
+                }
+            });
+
+            // Add empty dates to show all 7 days
+            weeks.forEach(week => {
+                const weekDates = week.dates;
+                const firstDay = new Date(week.firstDate);
+                const lastDay = new Date(firstDay.setDate(firstDay.getDate() + 6));
+                
+                const allDays = [];
+                while (firstDay <= lastDay) {
+                    allDays.push(firstDay.toISOString().split('T')[0]);
+                    firstDay.setDate(firstDay.getDate() + 1);
+                }
+
+                allDays.forEach(day => {
+                    if (!weekDates.includes(day)) {
+                        week.dates.push(day);
+                        week.tasks[day] = [];
+                    }
+                });
+            });
+
+            return weeks;
+        }
+
+        function getWeekKey(date) {
+            const year = new Date(date).getFullYear();
+            const weekNumber = Math.ceil((new Date(date).getTime() - new Date(year, 0, 1).getTime()) / (7 * 24 * 3600 * 1000));
+            return `${year}-Week-${weekNumber}`;
+        }
+
+        function getWeekDateString(date) {
+            const d = new Date(date);
+            return `${d.getFullYear()}-Week-${Math.ceil((d - new Date(d.getFullYear(), 0, 1)) / (7 * 24 * 3600 * 1000))}`;
+        }
+
+        function addTask(task) {
+            task.id = Date.now();
+            tasks.push(task);
+            saveToLocalStorage();
+            renderTasks();
+        }
+
+        function editTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                openForm(task);
+            }
+        }
+
+        function deleteTask(id) {
+            if (confirm('Are you sure you want to delete this task?')) {
+                tasks = tasks.filter(t => t.id !== id);
+                saveToLocalStorage();
+                renderTasks();
+            }
+        }
+
+        function openForm(task = {}) {
+            const formModal = document.getElementById('formModal');
+            const formTitle = document.getElementById('formTitle');
+            const formDate = document.getElementById('taskDate');
+            const formCategory = document.getElementById('taskCategory');
+            const formDescription = document.getElementById('taskDescription');
+            const formHours = document.getElementById('taskHours');
+
+            formModal.classList.add('active');
+            formTitle.textContent = task.id ? 'Edit Task' : 'Add Task';
+
+            if (task.id) {
+                formDate.value = task.date;
+                formCategory.value = task.category;
+                formDescription.value = task.description;
+                formHours.value = task.hours;
+            } else {
+                formDate.value = today;
+                formCategory.value = 'work';
+                formDescription.value = '';
+                formHours.value = 0;
+            }
+
+            formDate.min = today;
+        }
+
+        function closeForm() {
+            document.getElementById('formModal').classList.remove('active');
+        }
+
+        function handleSubmit(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+
+            if (!data.taskDescription || !data.taskDescription.trim()) {
+                alert('Description is required');
+                return;
+            }
+
+            if (parseFloat(data.taskHours) < 0 || parseFloat(data.taskHours) > 24) {
+                alert('Hours must be between 0 and 24');
+                return;
+            }
+
+            const task = {
+                date: data.taskDate,
+                category: data.taskCategory,
+                description: data.taskDescription.trim(),
+                hours: parseFloat(data.taskHours),
+                id: Date.now()
+            };
+
+            if (form.id && form.id.value) {
+                // Update existing task
+                tasks = tasks.map(t => t.id === form.id.value ? task : t);
+            } else {
+                // Add new task
+                tasks.push(task);
+            }
+
+            saveToLocalStorage();
+            closeForm();
+            renderTasks();
+        }
+
+        function exportData() {
+            const data = JSON.stringify(tasks, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'time-tracker.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedTasks = JSON.parse(event.target.result);
+                        tasks = importedTasks;
+                        saveToLocalStorage();
+                        renderTasks();
+                    } catch (error) {
+                        alert('Error importing data. Invalid JSON file.');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // Initial render
+        renderTasks();
+    </script>
+</body>
+</html>

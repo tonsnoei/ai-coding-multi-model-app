@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #ff9933;
+            color: #fff;
+            padding: 10px 0;
+            text-align: center;
+        }
+        header button {
+            background-color: #ffcc66;
+            border: none;
+            color: #333;
+            padding: 10px 20px;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        header button:hover {
+            background-color: #ffcc00;
+        }
+        .container {
+            padding: 20px;
+        }
+        .week {
+            margin-bottom: 20px;
+        }
+        .week-header {
+            background-color: #ffcc66;
+            padding: 10px;
+            font-weight: bold;
+        }
+        .date-header {
+            background-color: #ffeb99;
+            padding: 10px;
+            font-weight: bold;
+        }
+        .task {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .task form {
+            display: flex;
+            width: 100%;
+        }
+        .task form input, .task form select {
+            margin-right: 10px;
+            padding: 5px;
+        }
+        .task form button {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .task form button:hover {
+            background-color: #ffcc00;
+        }
+        .task-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .task-actions button {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .task-actions button:hover {
+            background-color: #ffcc00;
+        }
+        .empty-state {
+            text-align: center;
+            margin-top: 50px;
+        }
+        .empty-state button {
+            background-color: #ffcc66;
+            border: none;
+            color: #333;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+        .empty-state button:hover {
+            background-color: #ffcc00;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+        @media (max-width: 600px) {
+            header button {
+                padding: 8px 15px;
+            }
+            .task form input, .task form select {
+                margin-right: 5px;
+                padding: 4px;
+            }
+            .task form button {
+                padding: 4px 8px;
+            }
+            .task-actions button {
+                padding: 4px 8px;
+            }
+            .empty-state button {
+                padding: 8px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Time Tracker</h1>
+        <button onclick="exportData()">Export</button>
+        <button onclick="importData()">Import</button>
+        <button onclick="addTask()">Add Task</button>
+    </header>
+    <div class="container" id="app">
+        <div class="empty-state" id="emptyState">
+            <p>No tasks yet.</p>
+        </div>
+    </div>
+    <script>
+        const app = document.getElementById('app');
+        const emptyState = document.getElementById('emptyState');
+        const tasks = JSON.parse(localStorage.getItem('tasks2')) || [];
+
+        function render() {
+            app.innerHTML = '';
+            emptyState.style.display = tasks.length === 0 ? 'block' : 'none';
+
+            const weeks = groupTasksByWeek(tasks);
+            weeks.forEach(week => {
+                const weekDiv = document.createElement('div');
+                weekDiv.className = 'week';
+                const weekHeader = document.createElement('div');
+                weekHeader.className = 'week-header';
+                weekHeader.textContent = `Week ${week.weekNumber}`;
+                weekDiv.appendChild(weekHeader);
+
+                week.dates.forEach(date => {
+                    const dateDiv = document.createElement('div');
+                    dateDiv.className = 'date-header';
+                    dateDiv.textContent = `${date.date} (${date.dayName})`;
+                    weekDiv.appendChild(dateDiv);
+
+                    date.tasks.forEach(task => {
+                        const taskDiv = document.createElement('div');
+                        taskDiv.className = 'task';
+                        taskDiv.innerHTML = `
+                            <span>${task.description} - ${task.hours} hours</span>
+                            <div class="task-actions">
+                                <button onclick="editTask('${task.id}')">Edit</button>
+                                <button onclick="deleteTask('${task.id}')">Delete</button>
+                            </div>
+                        `;
+                        weekDiv.appendChild(taskDiv);
+                    });
+
+                    const totalHours = date.tasks.reduce((sum, task) => sum + task.hours, 0);
+                    const totalDiv = document.createElement('div');
+                    totalDiv.className = 'date-header';
+                    totalDiv.textContent = `Total: ${totalHours} hours`;
+                    weekDiv.appendChild(totalDiv);
+                });
+
+                const weekTotalHours = week.dates.reduce((sum, date) => sum + date.tasks.reduce((sum, task) => sum + task.hours, 0), 0);
+                const weekTotalDiv = document.createElement('div');
+                weekTotalDiv.className = 'week-header';
+                weekTotalDiv.textContent = `Week Total: ${weekTotalHours} hours`;
+                weekDiv.appendChild(weekTotalDiv);
+
+                app.appendChild(weekDiv);
+            });
+        }
+
+        function groupTasksByWeek(tasks) {
+            const weeks = {};
+            tasks.forEach(task => {
+                const date = new Date(task.date);
+                const year = date.getFullYear();
+                const weekNumber = getWeekNumber(date);
+                const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+
+                if (!weeks[`${year}-${weekNumber}`]) {
+                    weeks[`${year}-${weekNumber}`] = {
+                        weekNumber,
+                        dates: []
+                    };
+                }
+
+                const week = weeks[`${year}-${weekNumber}`];
+                const dateKey = task.date;
+
+                if (!week.dates.find(d => d.date === dateKey)) {
+                    week.dates.push({
+                        date: dateKey,
+                        dayName,
+                        tasks: []
+                    });
+                }
+
+                const dateObj = week.dates.find(d => d.date === dateKey);
+                dateObj.tasks.push(task);
+                dateObj.tasks.sort((a, b) => a.description.localeCompare(b.description));
+            });
+
+            return Object.values(weeks).sort((a, b) => b.weekNumber - a.weekNumber);
+        }
+
+        function getWeekNumber(date) {
+            const startOfYear = new Date(date.getFullYear(), 0, 1);
+            const daysOffset = startOfYear.getDay() === 0 ? 6 : startOfYear.getDay() - 1;
+            const dayOfYear = Math.floor((date - startOfYear) / (24 * 60 * 60 * 1000));
+            return Math.ceil((dayOfYear + daysOffset + 1) / 7);
+        }
+
+        function addTask(date = new Date().toISOString().split('T')[0]) {
+            const taskForm = document.createElement('div');
+            taskForm.className = 'task';
+            taskForm.innerHTML = `
+                <form onsubmit="saveTask(event)">
+                    <input type="date" name="date" value="${date}" required>
+                    <select name="category" required>
+                        <option value="work" selected>Work</option>
+                        <option value="free">Free</option>
+                        <option value="sick">Sick</option>
+                    </select>
+                    <input type="number" name="hours" step="0.01" min="0" max="24" required>
+                    <input type="text" name="description" required>
+                    <button type="submit">Save</button>
+                    <button type="button" onclick="cancelTask(this)">Cancel</button>
+                </form>
+            `;
+            app.prepend(taskForm);
+        }
+
+        function saveTask(event) {
+            event.preventDefault();
+            const form = event.target;
+            const date = form.date.value;
+            const category = form.category.value;
+            const hours = parseFloat(form.hours.value);
+            const description = form.description.value;
+
+            if (isNaN(hours) || hours < 0 || hours > 24) {
+                alert('Hours must be between 0 and 24.');
+                return;
+            }
+
+            const task = {
+                id: Date.now().toString(),
+                date,
+                category,
+                hours,
+                description
+            };
+
+            tasks.push(task);
+            localStorage.setItem('tasks2', JSON.stringify(tasks));
+            render();
+        }
+
+        function editTask(id) {
+            const task = tasks.find(t => t.id === id);
+            const taskDiv = Array.from(document.querySelectorAll('.task')).find(div => div.querySelector('span').textContent.includes(task.description));
+            taskDiv.innerHTML = `
+                <form onsubmit="updateTask(event, '${id}')">
+                    <input type="date" name="date" value="${task.date}" required>
+                    <select name="category" required>
+                        <option value="work" ${task.category === 'work' ? 'selected' : ''}>Work</option>
+                        <option value="free" ${task.category === 'free' ? 'selected' : ''}>Free</option>
+                        <option value="sick" ${task.category === 'sick' ? 'selected' : ''}>Sick</option>
+                    </select>
+                    <input type="number" name="hours" step="0.01" min="0" max="24" value="${task.hours}" required>
+                    <input type="text" name="description" value="${task.description}" required>
+                    <button type="submit">Update</button>
+                    <button type="button" onclick="cancelTask(this)">Cancel</button>
+                </form>
+            `;
+        }
+
+        function updateTask(event, id) {
+            event.preventDefault();
+            const form = event.target;
+            const date = form.date.value;
+            const category = form.category.value;
+            const hours = parseFloat(form.hours.value);
+            const description = form.description.value;
+
+            if (isNaN(hours) || hours < 0 || hours > 24) {
+                alert('Hours must be between 0 and 24.');
+                return;
+            }
+
+            const task = tasks.find(t => t.id === id);
+            task.date = date;
+            task.category = category;
+            task.hours = hours;
+            task.description = description;
+
+            localStorage.setItem('tasks2', JSON.stringify(tasks));
+            render();
+        }
+
+        function deleteTask(id) {
+            if (confirm('Are you sure you want to delete this task?')) {
+                const taskIndex = tasks.findIndex(t => t.id === id);
+                tasks.splice(taskIndex, 1);
+                localStorage.setItem('tasks2', JSON.stringify(tasks));
+                render();
+            }
+        }
+
+        function cancelTask(button) {
+            const taskForm = button.closest('.task');
+            taskForm.remove();
+        }
+
+        function exportData() {
+            const dataStr = JSON.stringify(tasks, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+            const exportFileDefaultName = 'time-tracker-data.json';
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            const importedTasks = JSON.parse(e.target.result);
+                            tasks.length = 0;
+                            tasks.push(...importedTasks);
+                            localStorage.setItem('tasks2', JSON.stringify(tasks));
+                            render();
+                        } catch (error) {
+                            alert('Invalid JSON file.');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                const activeForm = document.querySelector('.task form');
+                if (activeForm) {
+                    activeForm.querySelector('button[type="submit"]').click();
+                }
+            } else if (event.key === 'Escape') {
+                const activeForm = document.querySelector('.task form');
+                if (activeForm) {
+                    activeForm.querySelector('button[type="button"]').click();
+                }
+            }
+        });
+
+        render();
+    </script>
+</body>
+</html>

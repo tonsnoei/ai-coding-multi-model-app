@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Tracker</title>
+    <style>
+        :root {
+            --primary: #d35400;
+            --secondary: #e67e22;
+            --light: #f39c12;
+            --background: #fef5eb;
+            --text: #2c3e50;
+            --error: #e74c3c;
+            --success: #27ae60;
+            --card: #f9ebd0;
+            --border: #e0a976;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 16px;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--border);
+        }
+        
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 16px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s;
+            height: 40px;
+            min-width: 100px;
+        }
+        
+        button:hover {
+            background-color: var(--secondary);
+        }
+        
+        .week-header {
+            background-color: var(--secondary);
+            color: white;
+            padding: 12px 16px;
+            margin: 24px 0 12px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .day-header {
+            background-color: var(--light);
+            color: white;
+            padding: 10px 14px;
+            border-radius: 4px;
+            margin: 16px 0 8px;
+        }
+        
+        .task {
+            background-color: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 8px;
+        }
+        
+        .task-details {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .task-actions {
+            margin-top: 8px;
+        }
+        
+        .task-actions button {
+            font-size: 0.8rem;
+            padding: 6px 10px;
+            min-width: auto;
+        }
+        
+        .time-form {
+            background-color: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 8px;
+        }
+        
+        .time-form-row {
+            margin-bottom: 12px;
+        }
+        
+        .time-form-row label {
+            display: block;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        
+        .time-form-row input, 
+        .time-form-row select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background-color: white;
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .totals {
+            font-weight: 500;
+            margin-top: 8px;
+            padding: 8px 0;
+            text-align: right;
+            border-top: 1px dashed var(--border);
+        }
+        
+        .error {
+            color: var(--error);
+            font-size: 0.9rem;
+            margin-top: 4px;
+        }
+        
+        #empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            background-color: var(--card);
+            border-radius: 4px;
+            margin-top: 32px;
+        }
+        
+        .week-total {
+            font-weight: 500;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        #hidden-file-input {
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .task-details {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            button {
+                width: 100%;
+                margin-top: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <div>
+                <input type="file" id="hidden-file-input" accept=".json">
+                <button id="import-btn">Import</button>
+                <button id="export-btn">Export</button>
+            </div>
+            <button id="add-btn">Add Task</button>
+        </header>
+        
+        <div id="weeks-container"></div>
+        
+        <div id="empty-state">
+            <h2>No time entries yet</h2>
+            <p>Get started by adding your first task</p>
+            <button id="empty-add-btn">Add Task</button>
+        </div>
+    </div>
+    
+    <script>
+        // Task storage key
+        const STORAGE_KEY = 'time_tracker_tasks';
+        
+        // Global state
+        let tasks = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        let editingId = null;
+        
+        // DOM elements
+        const app = document.getElementById('app');
+        const weeksContainer = document.getElementById('weeks-container');
+        const emptyState = document.getElementById('empty-state');
+        const addBtn = document.getElementById('add-btn');
+        const emptyAddBtn = document.getElementById('empty-add-btn');
+        const importBtn = document.getElementById('import-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const hiddenFileInput = document.getElementById('hidden-file-input');
+        
+        // Get week number
+        function getWeekNumber(date) {
+            const d = new Date(date);
+            d.setHours(0, 0, 0, 0);
+            d.setDate(d.getDate() + 4 - (d.getDay() || 7)); // Adjust to Thursday same week
+            const yearStart = new Date(d.getFullYear(), 0, 1);
+            const weekNumber = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+            return weekNumber;
+        }
+        
+        // Get this week's first date (Sunday)
+        function getFirstDayOfWeek(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day;
+            return new Date(d.setDate(diff));
+        }
+        
+        // Convert date to yyyy-MM-dd format
+        function formatDate(date) {
+            return date.toISOString().split('T')[0];
+        }
+        
+        // Format day name (e.g. "Monday")
+        function formatDayName(date) {
+            return date.toLocaleDateString('en-US', { weekday: 'long' });
+        }
+        
+        // Group tasks by week
+        function groupByWeek(tasks) {
+            const grouped = {};
+            
+            tasks.forEach(task => {
+                const weekStart = formatDate(getFirstDayOfWeek(new Date(task.date)));
+                if (!grouped[weekStart]) {
+                    grouped[weekStart] = [];
+                }
+                grouped[weekStart].push(task);
+            });
+            
+            // Sort weeks with most recent first
+            return Object.entries(grouped)
+                .sort((a, b) => b[0].localeCompare(a[0]))
+                .map(([key, tasks]) => ({
+                    weekStart: key,
+                    weekStartDate: new Date(key),
+                    tasks: tasks
+                }));
+        }
+        
+        // Render the entire app
+        function render() {
+            weeksContainer.innerHTML = '';
+            const groupedWeeks = groupByWeek(tasks);
+            
+            if (groupedWeeks.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            
+            groupedWeeks.forEach(({ weekStart, weekStartDate, tasks }, weekIndex) => {
+                const weekEndDate = new Date(weekStartDate);
+                weekEndDate.setDate(weekEndDate.getDate() + 6);
+                
+                const formattedWeekStart = formatDate(weekStartDate);
+                const formattedWeekEnd = formatDate(weekEndDate);
+                const weekNumber = getWeekNumber(weekStartDate);
+                
+                // Set time to avoid timezone issues
+                weekStartDate.setHours(0, 0, 0, 0);
+                
+                const weekContainer = document.createElement('div');
+                weekContainer.className = 'week';
+                
+                weekContainer.innerHTML = `
+                    <div class="week-header">
+                        <h2>Week ${weekNumber} (${formattedWeekStart} - ${formattedWeekEnd})</h2>
+                    </div>
+                `;
+                
+                // Group tasks by day within this week
+                const tasksByDay = tasks.reduce((acc, task) => {
+                    if (!acc[task.date]) {
+                        acc[task.date] = [];
+                    }
+                    acc[task.date].push(task);
+                    return acc;
+                }, {});
+                
+                // Sort days in descending order
+                Object.keys(tasksByDay)
+                    .sort((a, b) => b.localeCompare(a))
+                    .forEach(date => {
+                        const dayName = formatDayName(new Date(date));
+                        const dayHeader = document.createElement('div');
+                        dayHeader.className = 'day-header';
+                        dayHeader.innerHTML = `<h3>${date} (${dayName})</h3>`;
+                        weekContainer.appendChild(dayHeader);
+                        
+                        // Sort tasks by description
+                        tasksByDay[date]
+                            .sort((a, b) => a.description.localeCompare(b.description))
+                            .forEach(task => renderTask(task, weekContainer));
+                        
+                        // Add day totals
+                        const dayTotal = tasksByDay[date].reduce((sum, task) => sum + parseFloat(task.hours), 0);
+                        const dayTotalEl = document.createElement('div');
+                        dayTotalEl.className = 'totals';
+                        dayTotalEl.textContent = `Daily Total: ${dayTotal.toFixed(2)} hours`;
+                        weekContainer.appendChild(dayTotalEl);
+                    });
+                
+                // Add week total
+                const weekTotal = tasks.reduce((sum, task) => sum + parseFloat(task.hours), 0);
+                const weekTotalEl = document.createElement('div');
+                weekTotalEl.className = 'totals week-total';
+                weekTotalEl.textContent = `Weekly Total: ${weekTotal.toFixed(2)} hours`;
+                weekContainer.appendChild(weekTotalEl);
+                
+                weeksContainer.appendChild(weekContainer);
+            });
+        }
+        
+        // Render a single task
+        function renderTask(task, container) {
+            const taskEl = document.createElement('div');
+            taskEl.className = 'task';
+            taskEl.dataset.taskId = task.id;
+            
+            taskEl.innerHTML = `
+                <div class="task-details">
+                    <div class="category">${task.category}</div>
+                    <div class="hours">${task.hours} hours</div>
+                </div>
+                <div class="description">${task.description}</div>
+                <div class="task-actions">
+                    <button class="edit-btn">Edit</button>
+                    <button class="delete-btn">Delete</button>
+                </div>
+            `;
+            
+            container.appendChild(taskEl);
+            
+            taskEl.querySelector('.edit-btn').addEventListener('click', () => toggleEdit(task.id));
+            taskEl.querySelector('.delete-btn').addEventListener('click', () => deleteTask(task.id));
+        }
+        
+        // Render an empty form for adding a task
+        function renderAddForm() {
+            const today = formatDate(new Date());
+            const formHTML = `
+                <div class="time-form">
+                    <h4>Add New Task</h4>
+                    <div class="time-form-row">
+                        <label for="date-input">Date</label>
+                        <input type="date" id="date-input" value="${today}">
+                    </div>
+                    <div class="time-form-row">
+                        <label for="category-select">Category</label>
+                        <select id="category-select">
+                            <option value="work" selected>Work</option>
+                            <option value="free">Free</option>
+                            <option value="sick">Sick</option>
+                        </select>
+                    </div>
+                    <div class="time-form-row">
+                        <label for="hours-input">Hours (0-24)</label>
+                        <input type="number" id="hours-input" min="0" max="24" step="0.25" value="8">
+                        <div id="hours-error" class="error hidden"></div>
+                    </div>
+                    <div class="time-form-row">
+                        <label for="description-input">Description</label>
+                        <input type="text" id="description-input" placeholder="Enter task description" maxlength="255">
+                        <div id="description-error" class="error hidden"></div>
+                    </div>
+                    <div class="form-actions">
+                        <button id="cancel-btn">Cancel</button>
+                        <button id="save-btn">Save</button>
+                    </div>
+                </div>
+            `;
+            
+            weeksContainer.insertAdjacentHTML('afterbegin', formHTML);
+            
+            const cancelBtn = document.getElementById('cancel-btn');
+            const saveBtn = document.getElementById('save-btn');
+            
+            cancelBtn.addEventListener('click', () => weeksContainer.firstChild.remove());
+            saveBtn.addEventListener('click', saveTask);
+            
+            // Clear any previous form
+            document.getElementById('hours-error').classList.add('hidden');
+            document.getElementById('description-error').classList.add('hidden');
+        }
+        
+        // Show edit form for a task
+        function toggleEdit(taskId) {
+            editingId = taskId;
+            
+            const taskItem = document.querySelector(`.task[data-task-id="${taskId}"]`);
+            if (!taskItem) return;
+            
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+            
+            taskItem.innerHTML = `
+                <div class="time-form">
+                    <h4>Edit Task</h4>
+                    <div class="time-form-row">
+                        <label for="date-input">Date</label>
+                        <input type="date" id="date-input" value="${task.date}">
+                    </div>
+                    <div class="time-form-row">
+                        <label for="category-select">Category</label>
+                        <select id="category-select">
+                            <option value="work" ${task.category === 'work' ? 'selected' : ''}>Work</option>
+                            <option value="free" ${task.category === 'free' ? 'selected' : ''}>Free</option>
+                            <option value="sick" ${task.category === 'sick' ? 'selected' : ''}>Sick</option>
+                        </select>
+                    </div>
+                    <div class="time-form-row">
+                        <label for="hours-input">Hours (0-24)</label>
+                        <input type="number" id="hours-input" min="0" max="24" step="0.25" value="${task.hours}">
+                        <div id="hours-error" class="error hidden"></div>
+                    </div>
+                    <div class="time-form-row">
+                        <label for="description-input">Description</label>
+                        <input type="text" id="description-input" value="${task.description}" maxlength="255">
+                        <div id="description-error" class="error hidden"></div>
+                    </div>
+                    <div class="form-actions">
+                        <button id="cancel-btn">Cancel</button>
+                        <button id="save-btn">Save</button>
+                    </div>
+                </div>
+            `;
+            
+            const cancelBtn = document.getElementById('cancel-btn');
+            const saveBtn = document.getElementById('save-btn');
+            
+            cancelBtn.addEventListener('click', () => {
+                editingId = null;
+                render();
+            });
+            
+            saveBtn.addEventListener('click', saveTask);
+            
+            // Clear any previous form
+            document.getElementById('hours-error').classList.add('hidden');
+            document.getElementById('description-error').classList.add('hidden');
+        }
+        
+        // Save a task (add or edit)
+        function saveTask() {
+            const dateInput = document.getElementById('date-input');
+            const categorySelect = document.getElementById('category-select');
+            const hoursInput = document.getElementById('hours-input');
+            const descriptionInput = document.getElementById('description-input');
+            
+            const hoursError = document.getElementById('hours-error');
+            const descriptionError = document.getElementById('description-error');
+            
+            let isValid = true;
+            
+            // Validate hours
+            const hours = parseFloat(hoursInput.value);
+            if (isNaN(hours) || hours < 0 || hours > 24) {
+                hoursError.textContent = 'Must be valid number between 0-24';
+                hoursError.classList.remove('hidden');
+                isValid = false;
+            } else {
+                hoursError.classList.add('hidden');
+            }
+            
+            // Validate description
+            const description = descriptionInput.value.trim();
+            if (!description) {
+                descriptionError.textContent = 'Description is required';
+                descriptionError.classList.remove('hidden');
+                isValid = false;
+            } else {
+                descriptionError.classList.add('hidden');
+            }
+            
+            if (!isValid) return;
+            
+            const taskData = {
+                id: editingId || Date.now().toString(),
+                date: dateInput.value,
+                category: categorySelect.value,
+                hours: hours,
+                description: description
+            };
+            
+            if (editingId) {
+                // Update existing task
+                tasks = tasks.map(task => task.id === editingId ? taskData : task);
+                editingId = null;
+            } else {
+                // Add new task
+                tasks.push(taskData);
+            }
+            
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+            render();
+        }
+        
+        // Delete task with confirmation
+        function deleteTask(taskId) {
+            if (!confirm('Are you sure you want to delete this time entry?')) {
+                return;
+            }
+            
+            tasks = tasks.filter(task => task.id !== taskId);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+            render();
+        }
+        
+        // Export tasks as JSON file
+        function exportTasks() {
+            const json = JSON.stringify(tasks, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `time-tracker-export-${formatDate(new Date())}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        // Import tasks from JSON file
+        function importTasks() {
+            const file = hiddenFileInput.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const importedTasks = JSON.parse(e.target.result);
+                    
+                    // Validate the structure
+                    const isValid = Array.isArray(importedTasks) && 
+                                    importedTasks.every(task => 
+                                        task.id && 
+                                        task.date && 
+                                        ['work', 'free', 'sick'].includes(task.category) && 
+                                        typeof task.hours === 'number' && 
+                                        task.description
+                                    );
+                    
+                    if (!isValid) {
+                        throw new Error('Invalid file format');
+                    }
+                    
+                    tasks = importedTasks;
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+                    render();
+                    alert('Successfully imported tasks!');
+                    
+                } catch (error) {
+                    alert('Error importing tasks: ' + error.message);
+                }
+                hiddenFileInput.value = '';
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        // Initialize the app
+        function init() {
+            render();
+            
+            addBtn.addEventListener('click', renderAddForm);
+            emptyAddBtn.addEventListener('click', renderAddForm);
+            
+            importBtn.addEventListener('click', () => hiddenFileInput.click());
+            exportBtn.addEventListener('click', exportTasks);
+            hiddenFileInput.addEventListener('change', importTasks);
+            
+            // Handle keyboard events
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && document.querySelector('.time-form')) {
+                    const editItem = document.querySelector('.task.editing');
+                    if (editItem) {
+                        render();
+                    } else {
+                        const form = document.querySelector('.time-form');
+                        if (form) form.remove();
+                    }
+                }
+            });
+        }
+        
+        // Start the app when loaded
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
