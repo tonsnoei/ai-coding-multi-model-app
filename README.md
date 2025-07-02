@@ -12,7 +12,7 @@ This is not a scientific research study - rather, I tried to find out how result
 * DeepSeek: R1 Distill Llama 70B (free) - https://openrouter.ai/deepseek/deepseek-r1-distill-llama-70b:free
 * DeepSeek: R1 0528 (free) - https://openrouter.ai/deepseek/deepseek-r1-0528:free
 
-See a comparation of the model quality
+Look at a [comparison](https://artificialanalysis.ai/models?models=gemini-2-5-pro%2Cdeepseek-r1-distill-llama-70b%2Cdeepseek-r1%2Cqwen2-5-coder-7b-instruct%2Cqwen2-5-coder-32b-instruct) of some of the above models
 
 # The initial prompt
 The creation of the initial prompt
