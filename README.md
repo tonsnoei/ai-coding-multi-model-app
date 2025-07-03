@@ -223,8 +223,8 @@ The Deepseek R1 671b model is much slower. This has 2 reasons:
 
 ## What I learned
 
-* When there is a bug in the code, don't tell the LLM what is functionally wrong, but try to figure out what the technical problem is and point that out. Instead, if possible, provide the error or exception message if any.
-* Giving a single prompt to generate an application at once is probably not the best idea for smaller models. Creating it with smaller steps is probably better, especially for smaller models.
+* When there is a bug in the code, don't tell the LLM what is functionally wrong, but try to figure out what the technical problem is and point that out. Or, if possible, provide the error or exception message if any.
+* Giving a single prompt to generate an application at once is probably not the best idea. Creating it with smaller steps is probably better, especially for smaller models.
 * Select the model by its purpose. Using *DeepSeek: R1 Distill Llama 70B* for coding seems to give less quality results compared to the 32b model that is specialized in coding.
 * The largest model is not always the best, but is slowest and in regular situations pricey.
 * Smaller models can perform a proper job.
